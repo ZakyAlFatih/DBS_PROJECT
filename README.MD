@@ -3,6 +3,7 @@
 ## Deskripsi
 
 Project ini adalah dashboard berbasis Python yang menampilkan visualisasi data dari berbagai sumber CSV.
+Note : pastikan memilih rentang tanggal dengan benar (yaitu awalan dan akhiran)
 
 ## Struktur Direktori
 

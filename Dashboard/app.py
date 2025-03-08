@@ -6,7 +6,7 @@ import folium
 from folium.plugins import MarkerCluster, HeatMap
 from streamlit_folium import folium_static
 
-# Load Data
+# Load Data dengan Caching
 @st.cache_data
 def load_data():
     cust_orders_df = pd.read_csv("../cust_orders.csv")
@@ -20,7 +20,7 @@ cust_orders_df, product_df, geo_df_cleaned = load_data()
 cust_orders_df['order_purchase_timestamp'] = pd.to_datetime(cust_orders_df['order_purchase_timestamp'])
 cust_orders_df['order_month'] = cust_orders_df['order_purchase_timestamp'].dt.to_period('M')
 
-
+# Sidebar untuk Navigasi
 st.sidebar.title("Dashboard E-Commerce")
 st.sidebar.write("### by Zaky Al Fatih Nata Imam")
 st.sidebar.markdown("[LinkedIn](https://www.linkedin.com/in/zaky-al-fatih-nata-imam/)")
@@ -29,7 +29,6 @@ page = st.sidebar.radio("Pilih Halaman", ["📊 Data Overview", "📈 Visualisas
 # 1️⃣ Halaman Ringkasan Data
 if page == "📊 Data Overview":
     st.title("📊 Ringkasan Data")
-
     st.subheader("📦 Data Pesanan Pelanggan")
     st.write(cust_orders_df.head())
 
@@ -39,15 +38,27 @@ if page == "📊 Data Overview":
     st.subheader("🌍 Data Geografis")
     st.write(geo_df_cleaned.head())
 
-# 2️⃣ Halaman Visualisasi
+# 2️⃣ Halaman Visualisasi dengan Filter Interaktif
 elif page == "📈 Visualisasi":
     st.title("📈 Visualisasi Data")
 
-    # Distribusi Status Pesanan
+    # 🔹 Filter Interaktif: Rentang Tanggal
+    st.sidebar.subheader("📅 Filter Tanggal")
+    min_date = cust_orders_df['order_purchase_timestamp'].min()
+    max_date = cust_orders_df['order_purchase_timestamp'].max()
+    start_date, end_date = st.sidebar.date_input("Pilih Rentang Tanggal", [min_date, max_date])
+
+    # Filter Data berdasarkan Tanggal
+    filtered_orders = cust_orders_df[
+        (cust_orders_df['order_purchase_timestamp'] >= pd.Timestamp(start_date)) &
+        (cust_orders_df['order_purchase_timestamp'] <= pd.Timestamp(end_date))
+    ]
+
+    # 🔹 Distribusi Status Pesanan
     st.subheader("📌 Distribusi Status Pesanan")
     fig, ax = plt.subplots(figsize=(8,5))
-    sns.countplot(data=cust_orders_df, x="order_status", 
-                  order=cust_orders_df["order_status"].value_counts().index, 
+    sns.countplot(data=filtered_orders, x="order_status", 
+                  order=filtered_orders["order_status"].value_counts().index, 
                   hue="order_status", palette="viridis", legend=False)
     plt.xticks(rotation=45)
     plt.title("Distribusi Status Pesanan")
@@ -55,9 +66,9 @@ elif page == "📈 Visualisasi":
     plt.ylabel("Jumlah Pesanan")
     st.pyplot(fig)
 
-    # Tren Jumlah Pesanan per Bulan
+    # 🔹 Tren Jumlah Pesanan per Bulan
     st.subheader("📅 Tren Jumlah Pesanan per Bulan")
-    monthly_orders = cust_orders_df.groupby("order_month").size()
+    monthly_orders = filtered_orders.groupby("order_month").size()
     fig, ax = plt.subplots(figsize=(10,5))
     sns.lineplot(x=monthly_orders.index.astype(str), y=monthly_orders.values)
     plt.xticks(rotation=45)
@@ -66,30 +77,42 @@ elif page == "📈 Visualisasi":
     plt.ylabel("Jumlah Pesanan")
     st.pyplot(fig)
 
-    # 10 Kategori Produk Terpopuler
-    st.subheader("🏆 10 Kategori Produk Terpopuler")
-    product_category_counts = product_df["product_category_name_english"].value_counts().head(10)
+    # 🔹 Filter Interaktif: Pilih Kategori Produk
+    st.sidebar.subheader("📌 Filter Kategori Produk")
+    all_categories = product_df["product_category_name_english"].unique().tolist()
+    selected_category = st.sidebar.selectbox("Pilih Kategori Produk", ["Semua"] + all_categories)
+
+    # Filter Produk berdasarkan Kategori
+    if selected_category != "Semua":
+        filtered_product_df = product_df[product_df["product_category_name_english"] == selected_category]
+    else:
+        filtered_product_df = product_df
+
+    # 🔹 10 Kategori Produk dengan Variasi Terbanyak
+    st.subheader("🏆 10 Produk dengan Variasi Terbanyak")
+    product_category_counts = filtered_product_df["product_category_name_english"].value_counts().head(10)
     fig, ax = plt.subplots(figsize=(10,5))
     sns.barplot(x=product_category_counts.values, y=product_category_counts.index, 
                 palette="magma", hue=product_category_counts.index, legend=False)
-    plt.title("10 Kategori Produk Terpopuler")
+    plt.title("10 Produk dengan Variasi Terbanyak")
     plt.xlabel("Jumlah Produk")
     plt.ylabel("Kategori Produk")
     st.pyplot(fig)
 
-    # Persebaran Lokasi Geografis Pelanggan
-    st.subheader("🌎 Persebaran Lokasi Geografis Pelanggan")
-    fig, ax = plt.subplots(figsize=(10,6))
-    sns.scatterplot(x=geo_df_cleaned['geolocation_lng'], 
-                    y=geo_df_cleaned['geolocation_lat'], alpha=0.5)
-    plt.title("Persebaran Lokasi Geografis Pelanggan")
-    plt.xlabel("Longitude")
-    plt.ylabel("Latitude")
-    st.pyplot(fig)
-
-# 3️⃣ Halaman Peta Geografis
+# 3️⃣ Halaman Peta Geografis dengan Filter Berdasarkan State
 elif page == "🗺️ Peta Geografis":
     st.title("🗺️ Peta Persebaran Pelanggan di Brazil")
+
+    # 🔹 Filter Interaktif: Pilih State
+    st.sidebar.subheader("📍 Filter Lokasi")
+    all_states = geo_df_cleaned["geolocation_state"].unique().tolist()
+    selected_state = st.sidebar.selectbox("Pilih State", ["Semua"] + all_states)
+
+    # Filter Data Geografis berdasarkan State
+    if selected_state != "Semua":
+        filtered_geo_df = geo_df_cleaned[geo_df_cleaned["geolocation_state"] == selected_state]
+    else:
+        filtered_geo_df = geo_df_cleaned
 
     # Tentukan koordinat tengah Brazil
     brazil_center = [-14.2350, -51.9253]
@@ -98,7 +121,7 @@ elif page == "🗺️ Peta Geografis":
     m = folium.Map(location=brazil_center, zoom_start=4)
 
     # Ambil sampel data untuk mempercepat render (misalnya, 10.000 titik)
-    sample_data = geo_df_cleaned.sample(n=10000, random_state=42)
+    sample_data = filtered_geo_df.sample(n=min(10000, len(filtered_geo_df)), random_state=42)
 
     # Tambahkan MarkerCluster
     marker_cluster = MarkerCluster().add_to(m)
